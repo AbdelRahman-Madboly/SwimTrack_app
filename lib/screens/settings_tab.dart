@@ -174,7 +174,7 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                     child: Row(
                       children: [
-                        const ConnectionStatusWidget(),
+                        const Expanded(child: ConnectionStatusWidget()),
                       ],
                     ),
                   ),
