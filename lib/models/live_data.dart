@@ -16,7 +16,9 @@
 //   "swolf_est":    "21.8",        // STRING
 //   "lap_dps":      "1.79",        // STRING — new in firmware v2.0
 //   "session_active": true,
-//   "session_laps": 2              // from sm->currentLapCount()
+//   "session_laps": 2,             // from sm->currentLapCount()
+//   "batt_pct":     82,            // integer — added in firmware v2.0 battery task
+//   "batt_mv":      3980           // integer — raw mV reading
 // }
 
 /// Real-time swim metrics from the device during a recording session.
@@ -31,6 +33,7 @@ class LiveData {
   final String strokeType;    // "stroke_type"
   final double lapElapsedS;   // "lap_elapsed_s" — current lap time
   final double lapDps;        // "lap_dps" — Distance Per Stroke for current lap [m/stroke]
+  final int    battPct;       // "batt_pct" — battery percentage (0–100), 0 = unknown
 
   const LiveData({
     required this.strokeCount,
@@ -43,6 +46,7 @@ class LiveData {
     this.strokeType = 'FREESTYLE',
     this.lapElapsedS = 0.0,
     this.lapDps = 0.0,
+    this.battPct = 0,
   });
 
   /// Parses a value that may be an int, double, or string.
@@ -78,6 +82,7 @@ class LiveData {
       strokeType:   (json['stroke_type'] as String?) ?? 'FREESTYLE',
       lapElapsedS:  lapElapsed,
       lapDps:       _d(json['lap_dps']),
+      battPct:      _i(json['batt_pct']),
     );
   }
 
@@ -90,5 +95,5 @@ class LiveData {
   @override
   String toString() =>
       'LiveData(strokes:$strokeCount laps:$lapCount swolf:$currentSwolf '
-      'spm:$strokeRate resting:$isResting)';
-} 
+      'spm:$strokeRate resting:$isResting batt:$battPct%)';
+}

@@ -1,5 +1,8 @@
 // DatabaseService — SQLite persistence for SwimTrack sessions, laps, and rests.
 // Call initDatabase() once on app start before any other method.
+//
+// v2 migration: adds avg_dps to sessions, dps to laps.
+// Existing installs are upgraded via onUpgrade (ALTER TABLE with DEFAULT 0.0).
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -23,23 +26,25 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 1,
-      onCreate: _onCreate,
+      version: 2,              // bumped from 1 — added avg_dps / dps columns
+      onCreate:  _onCreate,
+      onUpgrade: _onUpgrade,
     );
     debugPrint('DatabaseService: opened database at $path');
   }
 
-  /// Creates all tables on first run.
+  /// Creates all tables on first run (fresh install — includes all v2 columns).
   Future<void> _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE sessions (
-        id              TEXT PRIMARY KEY,
-        start_time      TEXT NOT NULL,
-        pool_length_m   INTEGER NOT NULL,
-        duration_sec    INTEGER NOT NULL,
+        id               TEXT PRIMARY KEY,
+        start_time       TEXT NOT NULL,
+        pool_length_m    INTEGER NOT NULL,
+        duration_sec     INTEGER NOT NULL,
         total_distance_m INTEGER NOT NULL,
-        avg_swolf       REAL NOT NULL,
-        avg_stroke_rate REAL NOT NULL
+        avg_swolf        REAL NOT NULL,
+        avg_stroke_rate  REAL NOT NULL,
+        avg_dps          REAL NOT NULL DEFAULT 0.0
       )
     ''');
 
@@ -52,6 +57,7 @@ class DatabaseService {
         time_seconds REAL NOT NULL,
         swolf        REAL NOT NULL,
         stroke_rate  REAL NOT NULL,
+        dps          REAL NOT NULL DEFAULT 0.0,
         FOREIGN KEY(session_id) REFERENCES sessions(id)
       )
     ''');
@@ -66,7 +72,20 @@ class DatabaseService {
       )
     ''');
 
-    debugPrint('DatabaseService: tables created');
+    debugPrint('DatabaseService: tables created (v2 schema)');
+  }
+
+  /// Upgrades existing database to the latest version.
+  /// v1 → v2: add avg_dps column to sessions, dps column to laps.
+  /// DEFAULT 0.0 ensures existing rows are not broken.
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+          'ALTER TABLE sessions ADD COLUMN avg_dps REAL NOT NULL DEFAULT 0.0');
+      await db.execute(
+          'ALTER TABLE laps ADD COLUMN dps REAL NOT NULL DEFAULT 0.0');
+      debugPrint('DatabaseService: migrated v1→v2 — added avg_dps and dps columns');
+    }
   }
 
   Database get _database {
@@ -93,6 +112,7 @@ class DatabaseService {
           'total_distance_m': session.totalDistanceM,
           'avg_swolf':        session.avgSwolf,
           'avg_stroke_rate':  session.avgStrokeRate,
+          'avg_dps':          session.avgDps,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -109,6 +129,7 @@ class DatabaseService {
           'time_seconds': lap.timeSeconds,
           'swolf':        lap.swolf,
           'stroke_rate':  lap.strokeRate,
+          'dps':          lap.dps,
         });
       }
 
@@ -134,7 +155,7 @@ class DatabaseService {
     final sessions = <Session>[];
 
     for (final row in rows) {
-      final id   = row['id'] as String;
+      final id    = row['id'] as String;
       final laps  = await _getLaps(id);
       final rests = await _getRests(id);
       sessions.add(_rowToSession(row, laps, rests));
@@ -159,9 +180,9 @@ class DatabaseService {
   Future<List<Lap>> _getLaps(String sessionId) async {
     final rows = await _database.query(
       'laps',
-      where:   'session_id = ?',
+      where:     'session_id = ?',
       whereArgs: [sessionId],
-      orderBy: 'lap_number ASC',
+      orderBy:   'lap_number ASC',
     );
     return rows.map((r) => Lap(
       lapNumber:   r['lap_number']   as int,
@@ -169,13 +190,14 @@ class DatabaseService {
       timeSeconds: r['time_seconds'] as double,
       swolf:       r['swolf']        as double,
       strokeRate:  r['stroke_rate']  as double,
+      dps:         (r['dps'] as double?) ?? 0.0,
     )).toList();
   }
 
   Future<List<RestInterval>> _getRests(String sessionId) async {
     final rows = await _database.query(
       'rests',
-      where:   'session_id = ?',
+      where:     'session_id = ?',
       whereArgs: [sessionId],
     );
     return rows.map((r) => RestInterval(
@@ -197,6 +219,7 @@ class DatabaseService {
       totalDistanceM: row['total_distance_m'] as int,
       avgSwolf:       row['avg_swolf']        as double,
       avgStrokeRate:  row['avg_stroke_rate']  as double,
+      avgDps:         (row['avg_dps'] as double?) ?? 0.0,
       laps:           laps,
       rests:          rests,
     );

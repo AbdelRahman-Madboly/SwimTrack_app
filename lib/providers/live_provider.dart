@@ -1,6 +1,6 @@
 // LiveProvider — streams real-time swim data while a session is recording.
 // Simulator mode: generates incrementing fake data every 1 second.
-// Real mode: polls GET /api/live every 1 second (wired in Stage 5).
+// Real mode: polls GET /api/live every 1 second via DeviceApiService.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +8,7 @@ import '../models/live_data.dart';
 import '../providers/device_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/mock_data_service.dart';
+import '../services/device_api_service.dart';
 
 /// Streams [LiveData?] — null when no session is active.
 /// Auto-disposes when no longer watched.
@@ -27,6 +28,7 @@ final liveProvider = StreamProvider.autoDispose<LiveData?>((ref) {
 /// Returns a stream that emits [LiveData] every second.
 Stream<LiveData?> _liveStream(bool isSimulator) async* {
   final stopwatch = Stopwatch()..start();
+  final api = DeviceApiService.instance;
 
   while (true) {
     await Future.delayed(const Duration(seconds: 1));
@@ -36,9 +38,7 @@ Stream<LiveData?> _liveStream(bool isSimulator) async* {
       if (isSimulator) {
         yield MockDataService.generateLiveData(elapsed);
       } else {
-        // Stage 5: yield await deviceApiService.getLiveData();
-        // For now fall back to mock even in real mode
-        yield MockDataService.generateLiveData(elapsed);
+        yield await api.getLiveData(elapsedSec: elapsed);
       }
     } catch (e) {
       debugPrint('LiveProvider: poll error → $e');

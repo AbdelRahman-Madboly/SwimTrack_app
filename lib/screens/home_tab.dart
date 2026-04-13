@@ -427,11 +427,14 @@ class _RecordingViewState extends ConsumerState<_RecordingView>
     super.dispose();
   }
 
+  /// Returns a display label for a stroke type string from the device.
+  /// Falls back to Freestyle for any unrecognised value.
   String _strokeLabel(String key) {
     switch (key) {
       case 'BACKSTROKE':   return '↩ Backstroke';
       case 'BREASTSTROKE': return '🤸 Breaststroke';
       case 'BUTTERFLY':    return '🦋 Butterfly';
+      case 'UNKNOWN':      return '❓ Detecting…';
       default:             return '🏊 Freestyle';
     }
   }
@@ -456,7 +459,7 @@ class _RecordingViewState extends ConsumerState<_RecordingView>
             children: [
               const SizedBox(height: 24),
 
-              // Status row
+              // Status row — RECORDING indicator + elapsed time + battery
               Row(
                 children: [
                   AnimatedBuilder(
@@ -477,6 +480,25 @@ class _RecordingViewState extends ConsumerState<_RecordingView>
                       style: SwimTrackTextStyles.label(color: SwimTrackColors.bad)
                           .copyWith(fontWeight: FontWeight.w700)),
                   const Spacer(),
+                  // Battery indicator — shown once firmware provides batt_pct
+                  if (live != null && live.battPct > 0) ...[
+                    Icon(
+                      live.battPct >= 80 ? Icons.battery_full
+                          : live.battPct >= 50 ? Icons.battery_3_bar
+                          : live.battPct >= 20 ? Icons.battery_2_bar
+                          : Icons.battery_1_bar,
+                      color: live.battPct >= 50 ? SwimTrackColors.good
+                          : live.battPct >= 20 ? SwimTrackColors.neutral
+                          : SwimTrackColors.bad,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${live.battPct}%',
+                      style: SwimTrackTextStyles.tiny(color: Colors.white70),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
                   Text(
                     _fmt(live?.elapsedSec ?? widget.elapsedSec),
                     style: SwimTrackTextStyles.screenTitle(color: Colors.white70),
@@ -495,8 +517,10 @@ class _RecordingViewState extends ConsumerState<_RecordingView>
               Text('STROKES',
                   style: SwimTrackTextStyles.label(color: Colors.white54)),
               const SizedBox(height: 12),
+
+              // Stroke type — uses real device detection, falls back to user selection
               Text(
-                _strokeLabel(widget.selectedStroke),
+                _strokeLabel(live?.strokeType ?? widget.selectedStroke),
                 style: SwimTrackTextStyles.cardTitle(
                     color: SwimTrackColors.secondary),
               ),
